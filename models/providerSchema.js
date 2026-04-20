@@ -146,10 +146,36 @@ const providerSchema = new mongoose.Schema(
             enum: ["pending", "approved", "rejected"],
             default: "pending",
         },
+        rating: {
+            type: Number,
+            default: 0,
+        },
     },
     {
         timestamps: true,
     }
 );
+
+providerSchema.statics.recalculateRating = async function (providerId) {
+    const { Booking } = await import('./bookingSchema.js');
+    const { Renovation } = await import('./renovationSchema.js');
+
+    const [bookingRatings, renRatings] = await Promise.all([
+        Booking.find({ provider: providerId, status: 'completed', customerRating: { $exists: true } }).select('customerRating'),
+        Renovation.find({ provider: providerId, status: 'completed', customerRating: { $exists: true } }).select('customerRating')
+    ]);
+
+    const allRatings = [
+        ...bookingRatings.map(b => b.customerRating),
+        ...renRatings.map(r => r.customerRating)
+    ];
+
+    const avgRating = allRatings.length > 0
+        ? (allRatings.reduce((sum, r) => sum + r, 0) / allRatings.length)
+        : 4.5;
+
+    await this.findByIdAndUpdate(providerId, { rating: avgRating });
+    return avgRating;
+};
 
 export const Provider = mongoose.models.Provider || mongoose.model("Provider", providerSchema);

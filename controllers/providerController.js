@@ -322,7 +322,7 @@ export const updateServiceAreas = async (req, res) => {
 export const getMyAvailability = async (req, res) => {
     try {
         const provider = await Provider.findOne({ user: req.user.id })
-            .select('serviceAreas workingDays workingHours emergencyAvailability isAvailable pincode area city');
+            .select('serviceAreas workingDays workingHours emergencyAvailability isAvailable pincode area city rating');
         if (!provider) {
             return res.status(404).json({ success: false, message: "Provider profile not found" });
         }
@@ -332,3 +332,90 @@ export const getMyAvailability = async (req, res) => {
     }
 };
 
+// Get reviews for a provider (aggregated from Bookings and Renovations)
+export const getProviderReviews = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { Booking } = await import('../models/bookingSchema.js');
+        const { Renovation } = await import('../models/renovationSchema.js');
+
+        const [bookingReviews, renReviews] = await Promise.all([
+            Booking.find({ provider: id, status: 'completed', customerRating: { $exists: true } })
+                .populate('customer', 'name')
+                .select('customerRating customerReview createdAt service'),
+            Renovation.find({ provider: id, status: 'completed', customerRating: { $exists: true } })
+                .populate('customer', 'name')
+                .select('customerRating customerReview createdAt projectTitle')
+        ]);
+
+        const allReviews = [
+            ...bookingReviews.map(b => ({
+                id: b._id,
+                rating: b.customerRating,
+                review: b.customerReview,
+                date: b.createdAt,
+                customer: b.customer?.name || "Customer",
+                type: 'Service',
+                serviceName: b.service?.name
+            })),
+            ...renReviews.map(r => ({
+                id: r._id,
+                rating: r.customerRating,
+                review: r.customerReview,
+                date: r.createdAt,
+                customer: r.customer?.name || "Customer",
+                type: 'Renovation',
+                serviceName: r.projectTitle
+            }))
+        ].sort((a, b) => b.date - a.date);
+
+        res.status(200).json({
+            success: true,
+            count: allReviews.length,
+            data: allReviews
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+// Admin: Monitor all providers' availability and live status
+export const getProviderAvailabilityMonitor = async (req, res) => {
+    try {
+        const { pincode, status } = req.query;
+        
+        let query = { status: "approved" };
+
+        if (status === "online") query.isAvailable = true;
+        if (status === "offline") query.isAvailable = false;
+
+        if (pincode) {
+            const pinStr = String(pincode).trim();
+            query.$or = [
+                { pincode: Number(pinStr) },
+                { "serviceAreas.pincode": pinStr }
+            ];
+        }
+
+        const providers = await Provider.find(query)
+            .populate("user", "name email")
+            .populate("primaryService", "name")
+            .select("ownerName businessName phone email city area pincode isAvailable status rating profilePhoto serviceAreas updatedAt")
+            .sort({ isAvailable: -1, updatedAt: -1 });
+
+        const stats = {
+            total: await Provider.countDocuments({ status: "approved" }),
+            online: await Provider.countDocuments({ status: "approved", isAvailable: true }),
+            offline: await Provider.countDocuments({ status: "approved", isAvailable: false }),
+            pending: await Provider.countDocuments({ status: "pending" })
+        };
+
+        res.status(200).json({
+            success: true,
+            stats,
+            data: providers
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
