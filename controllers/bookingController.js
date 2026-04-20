@@ -395,6 +395,12 @@ export const rateProvider = async (req, res) => {
 
     await booking.save();
 
+    // Recalculate Provider's Average Rating
+    const providerId = booking.provider;
+    if (providerId) {
+      await Provider.recalculateRating(providerId);
+    }
+
     res.json({ success: true, message: 'Provider rated successfully', data: booking });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

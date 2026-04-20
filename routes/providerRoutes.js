@@ -11,9 +11,14 @@ import {
     deleteProvider,
     updateServiceAreas,
     getMyAvailability,
+    getProviderReviews,
+    getProviderAvailabilityMonitor,
 } from "../controllers/providerController.js";
 
 const router = express.Router();
+
+// Public: Get reviews for a specific provider
+router.get("/:id/reviews", getProviderReviews);
 
 // Public/Authenticated Enrollment
 router.post(
@@ -35,8 +40,7 @@ router.get("/search", async (req, res) => {
 
         // Build query — only approved providers
         const query = {
-            status: "approved",
-            isAvailable: { $ne: false } // Only show providers currently taking orders
+            status: "approved"
         };
 
         // Filter by service if provided
@@ -54,7 +58,7 @@ router.get("/search", async (req, res) => {
         }
 
         const providers = await Provider.find(query)
-            .select("ownerName businessName phone primaryService area city pincode experience description emergencyAvailability workingHours workingDays profilePhoto serviceAreas isAvailable")
+            .select("ownerName businessName phone primaryService area city pincode experience description emergencyAvailability workingHours workingDays profilePhoto serviceAreas isAvailable rating")
             .populate("primaryService", "name")
             .sort({ experience: -1 });
 
@@ -71,6 +75,9 @@ router.get("/search", async (req, res) => {
 // Provider: get and update own availability / service areas
 router.get("/my/availability", protect, getMyAvailability);
 router.patch("/my/availability", protect, updateServiceAreas);
+
+// Admin: Monitor all availability
+router.get("/admin/availability-monitor", getProviderAvailabilityMonitor);
 
 // Admin/Shared CRUD
 router.get("/", getAllProviders);

@@ -111,6 +111,16 @@ const renovationRequestSchema = new mongoose.Schema({
   providerRating: { type: Number, min: 1, max: 5 },
   providerReview: String,
   
+  // AI Automation tracking
+  aiCallStatus: { type: String, enum: ['none', 'pending', 'completed', 'failed'], default: 'none' },
+  aiCallSummary: String,
+  aiCallAnswers: [{
+    question: String,
+    answer: String
+  }],
+  aiMeetingScheduled: Date,
+  aiCallId: String,
+
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
