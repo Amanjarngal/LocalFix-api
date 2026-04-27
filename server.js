@@ -27,9 +27,16 @@ const app = express();
 
 // Create HTTP server and attach Socket.IO
 const httpServer = createServer(app);
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
   }
@@ -39,7 +46,13 @@ const io = new Server(httpServer, {
 app.set("io", io);
 
 app.use(cors({
-  origin: "http://localhost:5173",
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed: " + origin));
+    }
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization", "Cookie"]
@@ -105,3 +118,5 @@ const startServer = async () => {
 };
 
 startServer();
+
+export default app;
