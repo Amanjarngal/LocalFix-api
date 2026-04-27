@@ -10,11 +10,18 @@ export const createService = async (req, res) => {
             return res.status(400).json({ message: "Service already exists" });
         }
 
-        const service = await Service.create({
+        const serviceData = {
             name,
             description,
             icon,
-        });
+        };
+
+        // If an image was uploaded via multer/cloudinary
+        if (req.file) {
+            serviceData.image = req.file.path; // Cloudinary URL
+        }
+
+        const service = await Service.create(serviceData);
 
         res.status(201).json({
             message: "Service created successfully",
@@ -58,7 +65,14 @@ export const getServiceById = async (req, res) => {
 // Update Service
 export const updateService = async (req, res) => {
     try {
-        const service = await Service.findByIdAndUpdate(req.params.id, req.body, {
+        const updateData = { ...req.body };
+
+        // If a new image was uploaded, set it
+        if (req.file) {
+            updateData.image = req.file.path; // Cloudinary URL
+        }
+
+        const service = await Service.findByIdAndUpdate(req.params.id, updateData, {
             new: true,
             runValidators: true,
         });

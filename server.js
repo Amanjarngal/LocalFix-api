@@ -1,6 +1,8 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { createServer } from "http";
+import { Server } from "socket.io";
 import { connectdb } from "./config/db.js";
 import cookieParser from "cookie-parser";
 import path from "path";
@@ -16,11 +18,26 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
 import payoutRoutes from "./routes/payoutRoutes.js";
 import renovationRoutes from "./routes/renovationRoutes.js";
+import chatbotRoutes from "./routes/chatbotRoutes.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
+
+// Create HTTP server and attach Socket.IO
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "http://localhost:5173",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+  }
+});
+
+// Make io accessible to all routes via req.app
+app.set("io", io);
+
 app.use(cors({
   origin: "http://localhost:5173",
   credentials: true,
@@ -43,11 +60,34 @@ app.use("/api/payment", paymentRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/payouts", payoutRoutes);
 app.use("/api/renovations", renovationRoutes);
+app.use("/api/chat", chatbotRoutes);
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({ message: "Server is running", status: "ok" });
 });
 
+// ─── Socket.IO Connection Handler ───
+io.on("connection", (socket) => {
+  console.log(`⚡ Socket connected: ${socket.id}`);
+
+  // Allow clients to join their own user room for targeted events
+  socket.on("join", (userId) => {
+    if (userId) {
+      socket.join(userId);
+      console.log(`👤 User ${userId} joined room`);
+    }
+  });
+
+  // Admin joins admin room
+  socket.on("join_admin", () => {
+    socket.join("admin_room");
+    console.log(`🛡️  Admin joined admin_room`);
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`🔌 Socket disconnected: ${socket.id}`);
+  });
+});
 
 const startServer = async () => {
   try {
@@ -55,8 +95,8 @@ const startServer = async () => {
     console.log("MongoDB connected");
 
     const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
-      console.log(`Server running`);
+    httpServer.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
     });
   } catch (err) {
     console.error("Server start failed:", err.message);

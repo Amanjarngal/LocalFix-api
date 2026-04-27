@@ -26,14 +26,6 @@ export const registerUser = async (req, res, next) => {
       password: hashed,
     });
 
-    const token = await genToken(user._id);
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000 * 2,
-    });
-
     return res.status(201).json({
       message: "User created successfully",
       success: true,

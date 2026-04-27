@@ -92,6 +92,12 @@ export const createBooking = async (req, res) => {
       paymentStatus: paymentMethod === 'online' ? 'paid' : 'pending',
     });
 
+    // Real-time: notify admin and relevant providers
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin_room').emit('booking_created', booking);
+      io.emit('booking_update', { type: 'created', booking });
+    }
 
     res.status(201).json({
       success: true,
@@ -157,6 +163,12 @@ export const cancelBooking = async (req, res) => {
     booking.status = 'cancelled';
     booking.cancelledBy = 'customer';
     await booking.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(booking.customer.toString()).emit('booking_status_changed', { bookingId: booking._id, status: 'cancelled' });
+      io.to('admin_room').emit('booking_update', { type: 'cancelled', booking });
+    }
 
     res.json({ success: true, message: 'Booking cancelled successfully', data: booking });
   } catch (err) {
@@ -236,6 +248,12 @@ export const acceptBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Booking is no longer available or does not exist' });
     }
 
+    const io = req.app.get('io');
+    if (io) {
+      io.to(booking.customer.toString()).emit('booking_status_changed', { bookingId: booking._id, status: 'accepted', providerId: provider._id });
+      io.to('admin_room').emit('booking_update', { type: 'accepted', booking });
+    }
+
     res.json({ success: true, message: 'Booking accepted successfully', data: booking });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -284,6 +302,12 @@ export const updateBookingStatus = async (req, res) => {
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(booking.customer.toString()).emit('booking_status_changed', { bookingId: booking._id, status });
+      io.to('admin_room').emit('booking_update', { type: 'status_changed', booking });
     }
 
     res.json({ success: true, message: `Status updated to ${status.replace('_', ' ')}`, data: booking });
@@ -336,6 +360,12 @@ export const completeBooking = async (req, res) => {
         platformFee: booking.platformFee,
         status: 'pending',
       });
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(booking.customer.toString()).emit('booking_status_changed', { bookingId: booking._id, status: 'completed' });
+      io.to('admin_room').emit('booking_update', { type: 'completed', booking });
     }
 
     res.json({ success: true, message: 'Booking completed successfully. Payout is queued for admin approval.', data: booking });

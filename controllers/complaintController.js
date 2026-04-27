@@ -60,6 +60,12 @@ export const raiseComplaint = async (req, res) => {
       })) || [],
     });
 
+    // Real-time: notify admin of new complaint
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin_room').emit('complaint_created', complaint);
+    }
+
     res.status(201).json({
       success: true,
       message: "Complaint raised successfully",
@@ -108,6 +114,12 @@ export const updateComplaint = async (req, res) => {
     }
 
     await complaint.save();
+
+    // Real-time: notify user whose complaint was updated
+    const io = req.app.get('io');
+    if (io) {
+      io.to(complaint.raisedBy.toString()).emit('complaint_updated', { complaintId: complaint._id, status: complaint.status, adminResponse: complaint.adminResponse });
+    }
 
     res.json({
       success: true,

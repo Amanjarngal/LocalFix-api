@@ -17,6 +17,10 @@ const serviceSchema = new mongoose.Schema(
             type: String,
             default: "Hammer",
         },
+        image: {
+            type: String,
+            default: "",
+        },
     },
     {
         timestamps: true,
