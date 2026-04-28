@@ -30,17 +30,21 @@ const renovationRequestSchema = new mongoose.Schema({
   },
   propertyType: {
     type: String,
-    enum: ['1BHK', '2BHK', '3BHK', '4BHK', '5BHK', 'Commercial', 'Other'],
+    enum: ['1BHK', '2BHK', '3BHK', '4BHK', '5BHK', 'Commercial', 'Residential', 'Villa/Bungalow', 'Apartment', 'Other'],
     required: true
   },
   renovationType: {
     type: String,
-    enum: ['complete', 'partial', 'modular', 'kitchen', 'bathroom', 'bedroom', 'living-room', 'other'],
+    enum: ['complete', 'partial', 'modular', 'kitchen', 'bathroom', 'bedroom', 'living-room', 'Full-House', 'other'],
     required: true
   },
   projectScope: [{
     type: String,
-    enum: ['painting', 'flooring', 'electrical', 'plumbing', 'carpentry', 'masonry', 'tiling', 'doors-windows', 'other']
+    enum: [
+      'painting', 'flooring', 'electrical', 'plumbing', 'carpentry', 'masonry', 'tiling', 'doors-windows',
+      'Structural', 'Electrical', 'Plumbing', 'Flooring', 'Painting', 'Kitchen', 'Bathroom', 
+      'Roofing', 'HVAC', 'Interior Design', 'Landscaping', 'other'
+    ]
   }],
   
   // Location & Contact Info

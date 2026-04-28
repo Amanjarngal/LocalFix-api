@@ -2,6 +2,7 @@ import { Renovation } from '../models/renovationSchema.js';
 import { Provider } from '../models/providerSchema.js';
 import { User } from '../models/userSchema.js';
 import twilio from 'twilio';
+import { analyzeCallResponse, cleanSpeechResponse } from '../services/geminiService.js';
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
 // ─────────────────────────────────────────
@@ -357,14 +358,41 @@ export const twimlProcess = async (req, res) => {
         nextStep = 'finish';
       }
 
-      // 2. Save the answer to the database
+      // 2. Clean and Save the answer
+      const cleanedAnswer = await cleanSpeechResponse(SpeechResult, currentQuestionAsked);
+      
+      if (cleanedAnswer.toLowerCase().includes('irrelevant')) {
+        say.p('Maaf kijiye, main samajh nahi paayi. Kripya thoda vistaar mein batayein.');
+        twiml.gather({
+          input: 'speech',
+          action: `/api/renovations/twiml/process/${id}?step=${step}`,
+          language: 'hi-IN',
+          speechTimeout: 'auto'
+        });
+        return res.type('text/xml').send(twiml.toString());
+      }
+
       await Renovation.findByIdAndUpdate(id, {
-        $push: { aiCallAnswers: { question: currentQuestionAsked, answer: SpeechResult } }
+        $push: { aiCallAnswers: { question: currentQuestionAsked, answer: cleanedAnswer } }
       });
 
       // 3. Handle transition
       if (nextStep === 'finish') {
         await Renovation.findByIdAndUpdate(id, { aiCallStatus: 'completed' });
+        
+        // Trigger AI analysis in background after finishing
+        const updatedRenovation = await Renovation.findById(id);
+        analyzeCallResponse(updatedRenovation.aiCallAnswers).then(async (analysis) => {
+          if (!analysis.error) {
+            await Renovation.findByIdAndUpdate(id, {
+              aiCallSummary: analysis.finalSummary,
+              // Optionally store cleaned answers if needed
+              // aiCallAnswers: analysis.cleanedAnswers 
+            });
+            console.log(`[Gemini AI] Call analysis completed for ${id}`);
+          }
+        }).catch(err => console.error('[Gemini AI] Analysis failed:', err));
+
         say.p('Dhanyavaad! Hum aapki request process kar rahe hain. Jaldi hi ek professional aapse contact karega. Pranaam!');
         twiml.hangup();
       } else {
