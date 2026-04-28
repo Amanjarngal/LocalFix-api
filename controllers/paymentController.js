@@ -145,3 +145,71 @@ export const verifyPayment = async (req, res) => {
     res.status(500).json({ success: false, message: 'Payment verification failed' });
   }
 };
+
+/**
+ * Admin: Refund a payment via Razorpay
+ */
+export const refundPayment = async (req, res) => {
+  try {
+    const { bookingId, amount, notes } = req.body;
+    console.log(`[Refund] Initiating for Booking: ${bookingId}, Amount: ${amount}`);
+
+    if (!bookingId) {
+      return res.status(400).json({ success: false, message: 'Booking ID is required' });
+    }
+
+    const { Booking } = await import("../models/bookingSchema.js");
+    const booking = await Booking.findById(bookingId);
+
+    if (!booking) {
+      console.error(`[Refund] Booking not found: ${bookingId}`);
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    if (!booking.razorpayPaymentId) {
+      console.error(`[Refund] No payment ID for booking: ${bookingId}`);
+      return res.status(400).json({ success: false, message: 'No Razorpay Payment ID found for this booking. If it was a cash payment, refund manually.' });
+    }
+
+    if (booking.paymentStatus === 'refunded') {
+      return res.status(400).json({ success: false, message: 'This booking has already been refunded' });
+    }
+
+    console.log(`[Refund] Calling Razorpay for Payment ID: ${booking.razorpayPaymentId}`);
+
+    // Use Razorpay SDK instead of manual axios for better reliability
+    const refundOptions = {
+      notes: {
+        reason: notes || 'Refund requested by admin via LocalFix Complaint System',
+        booking_id: booking._id.toString(),
+      }
+    };
+
+    if (amount) {
+      refundOptions.amount = amount * 100; // paise
+    }
+
+    // Refund using the SDK
+    const response = await razorpay.payments.refund(booking.razorpayPaymentId, refundOptions);
+
+    console.log(`[Refund] Razorpay Success:`, response.id);
+
+    // Update booking status
+    booking.paymentStatus = 'refunded';
+    booking.status = 'cancelled'; 
+    await booking.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Refund processed successfully',
+      data: response
+    });
+
+  } catch (error) {
+    console.error('Razorpay Refund Error Detail:', error);
+    res.status(500).json({
+      success: false,
+      message: error.description || error.message || 'Refund failed'
+    });
+  }
+};

@@ -79,16 +79,21 @@ ${userComplaints.length > 0
             console.error("Chatbot Auth Parsing Error (Continuing in Guest Mode) ", e.message);
         }
 
-const SYSTEM_PROMPT = `
+        const loginStatusContext = currentUser 
+            ? `USER STATUS: Logged In as ${currentUser.name} (${currentUser.role})`
+            : "USER STATUS: Not Logged In (Guest Mode)";
+
+        const SYSTEM_PROMPT = `
 You are the LocalFix Assistant, a highly professional customer service chatbot.
 Rules:
-1. Be polite, concise, and helpful. Use clear lists.
-2. **Bookings & Updates:** Show live status from the USER'S RECENT BOOKINGS below.
-3. **Complaint Tracking:** If user asks to track complaints, show their complaint status from the USER'S COMPLAINTS section below. Include the Complaint ID, current status, and admin response if available.
-4. **Complaint Categories:** service_quality, technical_system, payment_related, other
-5. **Raising Complaints:** Ask for Booking ID + issue description, then call 'raise_complaint' tool.
-6. Do NOT make up booking or complaint IDs.
-7. If the user is not logged in, tell them to log in first.
+1. ${loginStatusContext}
+2. Be polite, concise, and helpful. Use clear lists.
+3. **Bookings & Updates:** Show live status from the USER'S RECENT BOOKINGS below.
+4. **Complaint Tracking:** If user asks to track complaints, show their complaint status from the USER'S COMPLAINTS section below. Include the Complaint ID, current status, and admin response if available.
+5. **Complaint Categories:** service_quality, technical_system, payment_related, other
+6. **Raising Complaints:** Ask for Booking ID + issue description, then call 'raise_complaint' tool. Note: You can use either the full 24-character ID OR just the last 8 characters (e.g., ad63b4b4).
+7. Do NOT make up booking or complaint IDs.
+8. If the user is not logged in (${currentUser ? 'Logged In' : 'NOT Logged In'}), tell them to log in first.
 ${bookingsInfoContext}
 ${complaintsInfoContext}
 `;
@@ -146,18 +151,34 @@ ${complaintsInfoContext}
 
                 try {
                     const args = JSON.parse(toolCall.function.arguments);
-                    
-                    // Validate that bookingId is a proper MongoDB ObjectId
+                    // ─── ID MATCHING LOGIC (Full ID or Flexible Short ID) ───
+                    let targetBooking = null;
                     const mongoose = (await import('mongoose')).default;
-                    if (!mongoose.isValidObjectId(args.bookingId)) {
-                        return res.status(200).json({ response: `The Booking ID \`${args.bookingId}\` doesn't look valid. Please provide the correct Booking ID from your bookings list.` });
-                    }
+                    
+                    // Clean the input (remove # if user typed it, remove spaces)
+                    const cleanId = args.bookingId.replace(/#/g, '').trim();
 
-                    // Fetch booking and populate the provider (which links to a User)
-                    const targetBooking = await Booking.findById(args.bookingId).populate('provider', 'user');
+                    // 1. Try full ObjectId match
+                    if (mongoose.isValidObjectId(cleanId)) {
+                        targetBooking = await Booking.findById(cleanId).populate('provider', 'user');
+                    } 
+                    
+                    // 2. If no match yet, try partial matching against user's bookings
+                    if (!targetBooking) {
+                        const userBookings = await Booking.find({ customer: currentUser._id }).populate('provider', 'user');
+                        
+                        // Try to find a match where the stored ID ends with the provided cleanId 
+                        // OR the cleanId is long and contains a stored ID (for copy-paste accidents)
+                        targetBooking = userBookings.find(b => {
+                            const fullId = b._id.toString();
+                            return fullId.endsWith(cleanId) || cleanId.includes(fullId);
+                        });
+                    }
                     
                     if (!targetBooking) {
-                        return res.status(200).json({ response: `I couldn't locate a booking with ID \`${args.bookingId}\`. Please check your Booking ID and try again.` });
+                        return res.status(200).json({ 
+                            response: `I couldn't locate a booking matching \`${args.bookingId}\`. \n\n**Please provide the correct Booking ID** from your bookings list. You can simply click it in the list above!` 
+                        });
                     }
 
                     // The `against` field requires a User ObjectId.

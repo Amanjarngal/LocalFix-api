@@ -60,10 +60,19 @@ export const raiseComplaint = async (req, res) => {
       })) || [],
     });
 
-    // Real-time: notify admin of new complaint
+    // Real-time: notify admin of new complaint (populated)
+    const populatedComplaint = await Complaint.findById(complaint._id)
+      .populate({
+        path: 'booking',
+        select: 'scheduledDate status totalPrice paymentStatus paymentMethod razorpayOrderId razorpayPaymentId',
+        populate: { path: 'service', select: 'name' }
+      })
+      .populate('raisedBy', 'name email role')
+      .populate('against', 'name email role');
+
     const io = req.app.get('io');
     if (io) {
-      io.to('admin_room').emit('complaint_created', complaint);
+      io.to('admin_room').emit('complaint_created', populatedComplaint);
     }
 
     res.status(201).json({
@@ -81,7 +90,14 @@ export const getComplaints = async (req, res) => {
     const query = req.user.role === 'admin' ? {} : { raisedBy: req.user.id };
 
     const complaints = await Complaint.find(query)
-      .populate('booking', 'scheduledDate status')
+      .populate({
+        path: 'booking',
+        select: 'scheduledDate status totalPrice paymentStatus paymentMethod razorpayOrderId razorpayPaymentId',
+        populate: {
+          path: 'service',
+          select: 'name'
+        }
+      })
       .populate('raisedBy', 'name email role')
       .populate('against', 'name email role')
       .sort({ createdAt: -1 });
@@ -289,6 +305,21 @@ export const finalizeComplaintWithAI = async (req, res) => {
 
     // Clean up
     activeChatSessions.delete(sessionKey);
+
+    // Real-time: notify admin of new complaint (populated)
+    const populatedComplaint = await Complaint.findById(complaint._id)
+      .populate({
+        path: 'booking',
+        select: 'scheduledDate status totalPrice paymentStatus paymentMethod razorpayOrderId razorpayPaymentId',
+        populate: { path: 'service', select: 'name' }
+      })
+      .populate('raisedBy', 'name email role')
+      .populate('against', 'name email role');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin_room').emit('complaint_created', populatedComplaint);
+    }
 
     return res.status(201).json({
       success: true,

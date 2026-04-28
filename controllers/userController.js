@@ -48,8 +48,8 @@ export const logoutUser = async (req, res) => {
   try {
     res.clearCookie("token", {
       httpOnly: true,
-      secure: false, // Set to true in production
-      sameSite: "lax",
+      secure: true, 
+      sameSite: "none",
     });
     return res.status(200).json({
       success: true,
@@ -101,8 +101,8 @@ export const loginUser = async (req, res, next) => {
       const token = await genToken(isUserExists._id);
       res.cookie("token", token, {
         httpOnly: true,
-        secure: false,
-        sameSite: "lax",
+        secure: true,
+        sameSite: "none",
         maxAge: 24 * 60 * 60 * 1000 * 2,
       });
       return res.status(200).json({
